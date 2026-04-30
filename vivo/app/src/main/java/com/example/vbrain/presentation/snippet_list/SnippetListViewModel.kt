@@ -36,6 +36,18 @@ class SnippetListViewModel @Inject constructor(
     private val _selectedTag = MutableStateFlow<String?>(null)
     val selectedTag = _selectedTag.asStateFlow()
 
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading = _isLoading.asStateFlow()
+
+    private val _chatInput = MutableStateFlow("")
+    val chatInput = _chatInput.asStateFlow()
+
+    private val _chatReply = MutableStateFlow("")
+    val chatReply = _chatReply.asStateFlow()
+
+    private val _isChatSheetVisible = MutableStateFlow(false)
+    val isChatSheetVisible = _isChatSheetVisible.asStateFlow()
+
     // 提取所有不重复的标签
     val availableTags: StateFlow<List<String>> = repository.getAllSnippets()
         .map { snippets ->
@@ -75,6 +87,78 @@ class SnippetListViewModel @Inject constructor(
         _searchQuery.value = query
     }
 
+    fun onChatInputChange(input: String) {
+        _chatInput.value = input
+    }
+
+    fun toggleChatSheet(visible: Boolean) {
+        _isChatSheetVisible.value = visible
+        if (!visible) {
+            _chatInput.value = ""
+            _chatReply.value = ""
+        }
+    }
+
+    fun askQuestion() {
+        val question = _chatInput.value.trim()
+        if (question.isEmpty()) return
+
+        viewModelScope.launch {
+            _isLoading.value = true
+            _chatReply.value = "V-Brain 正在检索记忆并思考..."
+            try {
+                val queryToken = question.split(" ").firstOrNull() ?: question
+                // 若由于某些阶段未成功添加 searchSnippetsForChat，可暂时降级使用普通的 searchSnippets 的第一个 flow emission：
+                // val topSnippets = repository.searchSnippets(queryToken).firstOrNull()?.take(5) ?: emptyList()
+                // 为安全起见这里我们通过普通流拿到前 5 条作为模拟
+                
+                val topSnippets = kotlinx.coroutines.flow.first(repository.searchSnippets(queryToken)).take(5)
+                
+                val contextText = if (topSnippets.isEmpty()) {
+                    "无相关内容"
+                } else {
+                    topSnippets.joinToString("\n- ") { it.summary.ifEmpty { it.originalText }.take(100) }
+                }
+
+                val prompt = """
+                    基于以下用户的个人知识库片段：
+                    - $contextText
+                    
+                    请回答用户的问题：$question
+                    如果上下文中没有答案，请明确回答‘你的碎片库中暂无相关记录’。
+                """.trimIndent()
+
+                val request = LLMChatRequest(
+                    messages = listOf(
+                        LLMMessage(role = "system", content = "你是 V-Brain，一个智能的端侧知识提取助手。"),
+                        LLMMessage(role = "user", content = prompt)
+                    ),
+                    response_format = ResponseFormat(type = "json_object")
+                )
+
+                val response = llmApiService.getCompletions(request)
+                
+                val content = response.choices.firstOrNull()?.message?.content
+                if (!content.isNullOrBlank()) {
+                     try {
+                         val result = gson.fromJson(content, LLMResult::class.java)
+                         _chatReply.value = result.summary
+                     } catch(e: Exception) {
+                         _chatReply.value = content.replace("```json", "").replace("```", "")
+                     }
+                } else {
+                    _chatReply.value = "未获取到有效回答"
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _chatReply.value = "思考失败，请检查网络：${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun onTagSelect(tag: String?) {
         _selectedTag.value = if (_selectedTag.value == tag) null else tag
     }
@@ -92,12 +176,15 @@ class SnippetListViewModel @Inject constructor(
     fun processUnsummarizedSnippets() {
         viewModelScope.launch {
             try {
+                _isLoading.value = true
                 val pendingSnippets = repository.getUnsummarizedSnippets()
                 for (snippet in pendingSnippets) {
                     processSnippetWithRetry(snippet)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
+            } finally {
+                _isLoading.value = false
             }
         }
     }

@@ -5,6 +5,15 @@ plugins {
     id("com.google.dagger.hilt.android")
 }
 
+import java.util.Properties
+
+val localProperties = Properties().apply {
+    val localPropertiesFile = rootProject.file("local.properties")
+    if (localPropertiesFile.exists()) {
+        load(localPropertiesFile.inputStream())
+    }
+}
+
 android {
     namespace = "com.example.vbrain"
     compileSdk = 34
@@ -15,6 +24,9 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        val llmApiKey = localProperties.getProperty("LLM_API_KEY", "\"\"")
+        buildConfigField("String", "LLM_API_KEY", llmApiKey)
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -40,6 +52,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.11"

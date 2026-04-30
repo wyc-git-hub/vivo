@@ -7,6 +7,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +32,10 @@ fun HomeScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedTag by viewModel.selectedTag.collectAsState()
     val availableTags by viewModel.availableTags.collectAsState()
+    val isLoading by viewModel.isLoading.collectAsState()
+    val isChatSheetVisible by viewModel.isChatSheetVisible.collectAsState()
+    val chatInput by viewModel.chatInput.collectAsState()
+    val chatReply by viewModel.chatReply.collectAsState()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -37,13 +45,25 @@ fun HomeScreen(
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = MaterialTheme.colorScheme.background,
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { viewModel.toggleChatSheet(true) },
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            ) {
+                Icon(Icons.Rounded.AutoAwesome, contentDescription = "AI Q&A", tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+        }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
         ) {
+            if (isLoading) {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+
             OutlinedTextField(
                 value = searchQuery,
                 onValueChange = viewModel::onSearchQueryChange,
@@ -85,16 +105,100 @@ fun HomeScreen(
                     )
                 }
             }
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(snippets, key = { it.id }) { snippet ->
-                    KnowledgeCard(
-                        snippet = snippet,
-                        onClick = { onNavigateToDetail(snippet.id) }
+            if (snippets.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        Icons.Rounded.Inbox, 
+                        contentDescription = "Empty", 
+                        modifier = Modifier.size(64.dp), 
+                        tint = MaterialTheme.colorScheme.surfaceVariant
                     )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "暂无知识碎片",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "点击下方魔法棒或使用系统分享获取第一条知识吧！",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center
+                    )
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(snippets, key = { it.id }) { snippet ->
+                        KnowledgeCard(
+                            snippet = snippet,
+                            onClick = { onNavigateToDetail(snippet.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (isChatSheetVisible) {
+        ModalBottomSheet(
+            onDismissRequest = { viewModel.toggleChatSheet(false) },
+            containerColor = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 32.dp)
+            ) {
+                Text(
+                    text = "V-Brain 问答", 
+                    style = MaterialTheme.typography.titleLarge, 
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+
+                if (chatReply.isNotEmpty()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = chatReply,
+                            modifier = Modifier.padding(12.dp),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    OutlinedTextField(
+                        value = chatInput,
+                        onValueChange = viewModel::onChatInputChange,
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("向 V-Brain 提问...") },
+                        shape = RoundedCornerShape(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = { viewModel.askQuestion() },
+                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        enabled = !isLoading
+                    ) {
+                        Icon(Icons.Rounded.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
+                    }
                 }
             }
         }

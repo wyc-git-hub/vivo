@@ -1,5 +1,6 @@
 package com.example.vbrain.di
 
+import com.example.vbrain.BuildConfig
 import com.example.vbrain.data.remote.LLMApiService
 import dagger.Module
 import dagger.Provides
@@ -17,9 +18,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    // 假设配置的 Base URL 和 Token (开发时可替换为真实的配置)
+    // 假设配置的 Base URL (开发时可替换为真实的配置)
     private const val BASE_URL = "https://api.openai.com/"
-    private const val API_TOKEN = "YOUR_API_TOKEN_HERE" // 需替换为真实 Token
 
     @Provides
     @Singleton
@@ -30,7 +30,7 @@ object NetworkModule {
         
         val authInterceptor = Interceptor { chain ->
             val request = chain.request().newBuilder()
-                .addHeader("Authorization", "Bearer \$API_TOKEN")
+                .addHeader("Authorization", "Bearer ${BuildConfig.LLM_API_KEY}")
                 .build()
             chain.proceed(request)
         }
@@ -59,4 +59,3 @@ object NetworkModule {
         return retrofit.create(LLMApiService::class.java)
     }
 }
-
