@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">V-Brain</string>
+    <string name="accessibility_description">V-Brain 全局提取服务：用于捕获屏幕文字以保存碎片知识。</string>
+</resources>
+
