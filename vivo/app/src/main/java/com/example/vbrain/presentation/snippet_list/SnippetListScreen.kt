@@ -62,10 +62,14 @@ fun HomeScreen(
             ) {
                 item {
                     FilterChip(
-                        selected = selectedTag == null,
+                        selected = selectedTag == "全部" || selectedTag == null,
                         onClick = { viewModel.onTagSelect(null) },
                         label = { Text("全部") },
-                        shape = RoundedCornerShape(100)
+                        shape = RoundedCornerShape(100),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                 }
                 items(availableTags) { tag ->
@@ -73,7 +77,11 @@ fun HomeScreen(
                         selected = selectedTag == tag,
                         onClick = { viewModel.onTagSelect(tag) },
                         label = { Text(tag) },
-                        shape = RoundedCornerShape(100)
+                        shape = RoundedCornerShape(100),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                 }
             }
@@ -95,28 +103,60 @@ fun HomeScreen(
 @Composable
 fun KnowledgeCard(snippet: KnowledgeSnippet, onClick: () -> Unit) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
-    Card(
+    var expanded by remember { mutableStateOf(false) }
+
+    ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+            .clickable { expanded = !expanded }, // 点击整个卡片切换展开状态
+        shape = RoundedCornerShape(20.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            // 来源和小字时间
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = snippet.source,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = dateFormat.format(Date(snippet.timestamp)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 主体 summary
             Text(
                 text = snippet.summary.ifEmpty { "未提纯的知识碎片 (待处理)" },
                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                 color = MaterialTheme.colorScheme.onSurface,
-                maxLines = 3,
+                maxLines = if (expanded) Int.MAX_VALUE else 3,
                 overflow = TextOverflow.Ellipsis
             )
+            
+            // 展开状态下显示原文
+            if (expanded && snippet.originalText.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = MaterialTheme.colorScheme.surfaceVariant)
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = snippet.originalText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
             Spacer(modifier = Modifier.height(12.dp))
+            
+            // 底部的标签
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.Start,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -134,11 +174,6 @@ fun KnowledgeCard(snippet: KnowledgeSnippet, onClick: () -> Unit) {
                         }
                     }
                 }
-                Text(
-                    text = dateFormat.format(Date(snippet.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
