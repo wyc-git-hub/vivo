@@ -2,10 +2,11 @@ package com.example.vbrain.data.remote
 
 // 模型：请求体
 data class LLMChatRequest(
-    val model: String = "gpt-3.5-turbo",
+    // 【修改点】：将 "gpt-3.5-turbo" 替换为通义千问的 "qwen-turbo"
+    val model: String = "qwen-turbo",
     val messages: List<LLMMessage>,
     val temperature: Double = 0.3,
-    val response_format: ResponseFormat? = null // 用于强化要求返回 JSON (如果是最新版API)
+    val response_format: ResponseFormat? = null
 )
 
 data class LLMMessage(
@@ -33,4 +34,3 @@ data class LLMResult(
     val summary: String,
     val tags: List<String>
 )
-

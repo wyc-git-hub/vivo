@@ -19,7 +19,7 @@ import javax.inject.Singleton
 object NetworkModule {
 
     // Base URL: DeepSeek 官方兼容端点 (若使用通义千问，可替换为 "https://dashscope.aliyuncs.com/compatible-mode/v1/")
-    private const val BASE_URL = "https://api.deepseek.com/"
+    private const val BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1/"
 
     @Provides
     @Singleton

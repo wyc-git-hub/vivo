@@ -135,7 +135,7 @@ class SnippetListViewModel @Inject constructor(
                         LLMMessage(role = "system", content = "你是 V-Brain，一个智能的端侧知识提取助手。"),
                         LLMMessage(role = "user", content = prompt)
                     ),
-                    response_format = ResponseFormat(type = "json_object")
+//                    response_format = ResponseFormat(type = "json_object")
                 )
 
                 val response = llmApiService.getCompletions(request)
@@ -202,7 +202,7 @@ class SnippetListViewModel @Inject constructor(
                         LLMMessage(role = "system", content = systemPrompt),
                         LLMMessage(role = "user", content = snippet.originalText)
                     ),
-                    response_format = ResponseFormat(type = "json_object")
+//                    response_format = ResponseFormat(type = "json_object")
                 )
 
                 val response = llmApiService.getCompletions(request)
