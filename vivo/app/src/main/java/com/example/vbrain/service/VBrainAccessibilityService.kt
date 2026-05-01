@@ -45,13 +45,12 @@ class VBrainAccessibilityService : AccessibilityService() {
     }
 
     private fun extractScreenContent() {
-        // 🌟 1. 点击的瞬间立刻强制震动（给出即时反馈）
+        // 1. 点击瞬间立刻震动，证明程序收到了指令
         triggerVibration()
 
         val rootNode = rootInActiveWindow
-
         if (rootNode == null) {
-            Toast.makeText(applicationContext, "无法读取屏幕，可能是应用限制或页面未加载完", Toast.LENGTH_SHORT).show()
+            Toast.makeText(applicationContext, "获取失败：小红书页面未加载完或限制了读取", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -62,17 +61,14 @@ class VBrainAccessibilityService : AccessibilityService() {
         val extractedText = stringBuilder.toString().trim()
 
         if (extractedText.isNotEmpty()) {
-            // 🌟 2. 在协程(网络请求)开始前，弹出“正在处理”的提示
             Toast.makeText(applicationContext, "正在思考并存入大脑...", Toast.LENGTH_SHORT).show()
 
             serviceScope.launch {
                 try {
-                    // 请求千问大模型，会耗时 1-3 秒
                     extractAndSaveSnippetUseCase(originalText = extractedText, source = "屏幕提取")
 
                     withContext(Dispatchers.Main) {
-                        // 🌟 3. 成功后再震动一下，并提示保存成功
-                        triggerVibration()
+                        triggerVibration() // 成功后再震动一下
                         Toast.makeText(applicationContext, "🎉 保存成功", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
@@ -83,14 +79,36 @@ class VBrainAccessibilityService : AccessibilityService() {
                 }
             }
         } else {
-            Toast.makeText(applicationContext, "当前屏幕未发现可提取的纯文本", Toast.LENGTH_SHORT).show()
+            // 提示用户文字为什么没抓到
+            Toast.makeText(applicationContext, "未发现可提取文本（注意：AI无法直接读取图片里的文字）", Toast.LENGTH_LONG).show()
         }
     }
 
-    // 💥 强化版的震动方法 (已确保放在类的内部，且使用了 applicationContext 安全调用)
+    // 💥 增强版抓取逻辑：不再判断是否 isVisibleToUser，只要有文字统统抓走
+    private fun traverseNode(node: AccessibilityNodeInfo?, sb: StringBuilder) {
+        if (node == null) return
+
+        // 【关键修改】：去掉了 if (node.isVisibleToUser) 的限制
+        val text = node.text?.toString()
+        val desc = node.contentDescription?.toString()
+
+        if (!text.isNullOrBlank()) {
+            sb.append(text).append("\n")
+        } else if (!desc.isNullOrBlank()) {
+            sb.append(desc).append("\n")
+        }
+
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            traverseNode(child, sb)
+            child?.recycle()
+        }
+    }
+
+    // 震动反馈
     private fun triggerVibration() {
         try {
-            val duration = 150L
+            val duration = 100L
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 val vibratorManager = applicationContext.getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
                 vibratorManager.defaultVibrator.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
@@ -106,24 +124,6 @@ class VBrainAccessibilityService : AccessibilityService() {
             }
         } catch (e: Exception) {
             e.printStackTrace()
-        }
-    }
-
-    private fun traverseNode(node: AccessibilityNodeInfo?, sb: StringBuilder) {
-        if (node == null) return
-        if (node.isVisibleToUser) {
-            val text = node.text?.toString()
-            val desc = node.contentDescription?.toString()
-            if (!text.isNullOrBlank()) {
-                sb.append(text).append("\n")
-            } else if (!desc.isNullOrBlank()) {
-                sb.append(desc).append("\n")
-            }
-        }
-        for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            traverseNode(child, sb)
-            child?.recycle()
         }
     }
 

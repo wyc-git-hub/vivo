@@ -10,6 +10,8 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.Inbox
+import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -18,6 +20,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.ClipData
+import android.widget.Toast
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.vbrain.data.local.entity.KnowledgeSnippet
 import java.text.SimpleDateFormat
@@ -42,7 +49,19 @@ fun HomeScreen(
                 title = { Text("V-Brain 知识库", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
-                )
+                ),
+                actions = {
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp).padding(end = 16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        IconButton(onClick = { viewModel.processUnsummarizedSnippets() }) {
+                            Icon(Icons.Rounded.CloudSync, contentDescription = "Sync", tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -208,29 +227,45 @@ fun HomeScreen(
 fun KnowledgeCard(snippet: KnowledgeSnippet, onClick: () -> Unit) {
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
     var expanded by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { expanded = !expanded }, // 点击整个卡片切换展开状态
+            .clickable { onClick() },
         shape = RoundedCornerShape(20.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // 来源和小字时间
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = snippet.source,
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
-                    text = dateFormat.format(Date(snippet.timestamp)),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = dateFormat.format(Date(snippet.timestamp)),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    IconButton(
+                        onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val clip = ClipData.newPlainText("vbrain", snippet.summary + "\n\n" + snippet.originalText)
+                            clipboard.setPrimaryClip(clip)
+                            Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(8.dp))
 
