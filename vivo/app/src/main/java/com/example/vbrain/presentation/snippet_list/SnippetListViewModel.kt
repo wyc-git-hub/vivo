@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -70,10 +71,10 @@ class SnippetListViewModel @Inject constructor(
         }
 
         if (query.isNotBlank()) {
-            filteredList = filteredList.filter {
-                it.originalText.contains(query, ignoreCase = true) ||
-                it.summary.contains(query, ignoreCase = true) ||
-                it.tags.any { t -> t.contains(query, ignoreCase = true) }
+            filteredList = filteredList.filter { snippet ->
+                snippet.originalText.contains(query, ignoreCase = true) ||
+                        snippet.summary.contains(query, ignoreCase = true) ||
+                        snippet.tags.any { t -> t.contains(query, ignoreCase = true) }
             }
         }
         filteredList
@@ -108,16 +109,17 @@ class SnippetListViewModel @Inject constructor(
             _chatReply.value = "V-Brain 正在检索记忆并思考..."
             try {
                 val queryToken = question.split(" ").firstOrNull() ?: question
-                // 若由于某些阶段未成功添加 searchSnippetsForChat，可暂时降级使用普通的 searchSnippets 的第一个 flow emission：
-                // val topSnippets = repository.searchSnippets(queryToken).firstOrNull()?.take(5) ?: emptyList()
-                // 为安全起见这里我们通过普通流拿到前 5 条作为模拟
-                
-                val topSnippets = kotlinx.coroutines.flow.first(repository.searchSnippets(queryToken)).take(5)
-                
+
+                // 获取前5条相关的碎片
+                val topSnippets = repository.searchSnippets(queryToken).first().take(5)
+
                 val contextText = if (topSnippets.isEmpty()) {
                     "无相关内容"
                 } else {
-                    topSnippets.joinToString("\n- ") { it.summary.ifEmpty { it.originalText }.take(100) }
+                    // 修复点：显式命名 snippet 参数，避免 ifEmpty 中的 it 引用错误
+                    topSnippets.joinToString("\n- ") { snippet ->
+                        snippet.summary.ifEmpty { snippet.originalText }.take(100)
+                    }
                 }
 
                 val prompt = """
@@ -137,15 +139,15 @@ class SnippetListViewModel @Inject constructor(
                 )
 
                 val response = llmApiService.getCompletions(request)
-                
+
                 val content = response.choices.firstOrNull()?.message?.content
                 if (!content.isNullOrBlank()) {
-                     try {
-                         val result = gson.fromJson(content, LLMResult::class.java)
-                         _chatReply.value = result.summary
-                     } catch(e: Exception) {
-                         _chatReply.value = content.replace("```json", "").replace("```", "")
-                     }
+                    try {
+                        val result = gson.fromJson(content, LLMResult::class.java)
+                        _chatReply.value = result.summary
+                    } catch(e: Exception) {
+                        _chatReply.value = content.replace("```json", "").replace("```", "")
+                    }
                 } else {
                     _chatReply.value = "未获取到有效回答"
                 }
@@ -194,7 +196,7 @@ class SnippetListViewModel @Inject constructor(
         while (currentAttempt < maxRetries) {
             try {
                 val systemPrompt = "你是一个专业的知识提纯助手。请对用户输入的文本进行去水提纯。务必返回严格的JSON格式，包含字段：\"summary\"(不超过50字的精炼摘要) 和 \"tags\"(1-3个核心关键词的字符串数组)。不要输出任何其他内容。"
-                
+
                 val request = LLMChatRequest(
                     messages = listOf(
                         LLMMessage(role = "system", content = systemPrompt),
@@ -204,26 +206,24 @@ class SnippetListViewModel @Inject constructor(
                 )
 
                 val response = llmApiService.getCompletions(request)
-                
+
                 val content = response.choices.firstOrNull()?.message?.content
                 if (!content.isNullOrBlank()) {
                     val result = gson.fromJson(content, LLMResult::class.java)
-                    
+
                     val updatedSnippet = snippet.copy(
                         summary = result.summary,
                         tags = result.tags
                     )
-                    
+
                     repository.updateSnippet(updatedSnippet)
-                    break // 成功则退出重试循环
+                    break
                 }
             } catch (e: Exception) {
                 currentAttempt++
                 e.printStackTrace()
-                if (currentAttempt >= maxRetries) {
-                    // 处理最终失败情况，如记录日志，此处简单跳过
-                } else {
-                    delay(1000L * currentAttempt) // 简单的指数退避
+                if (currentAttempt < maxRetries) {
+                    delay(1000L * currentAttempt)
                 }
             }
         }

@@ -1,11 +1,10 @@
+import java.util.Properties
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
     id("com.google.dagger.hilt.android")
 }
-
-import java.util.Properties
 
 val localProperties = Properties().apply {
     val localPropertiesFile = rootProject.file("local.properties")
@@ -25,8 +24,10 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        val llmApiKey = localProperties.getProperty("LLM_API_KEY", "\"\"")
-        buildConfigField("String", "LLM_API_KEY", llmApiKey)
+        // 【修改点】获取 Key，如果没有则默认为空字符串（不带额外引号）
+        val llmApiKey = localProperties.getProperty("LLM_API_KEY", "")
+        // 注入到 BuildConfig 时，严格加上转义的双引号
+        buildConfigField("String", "LLM_API_KEY", "\"${llmApiKey}\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -95,4 +96,5 @@ dependencies {
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-gson:2.11.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("androidx.compose.material:material-icons-extended")
 }

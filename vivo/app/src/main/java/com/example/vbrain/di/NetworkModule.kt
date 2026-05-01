@@ -18,8 +18,8 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    // 假设配置的 Base URL (开发时可替换为真实的配置)
-    private const val BASE_URL = "https://api.openai.com/"
+    // Base URL: DeepSeek 官方兼容端点 (若使用通义千问，可替换为 "https://dashscope.aliyuncs.com/compatible-mode/v1/")
+    private const val BASE_URL = "https://api.deepseek.com/"
 
     @Provides
     @Singleton

@@ -6,7 +6,7 @@ import retrofit2.http.POST
 
 interface LLMApiService {
     @Headers("Content-Type: application/json")
-    @POST("v1/chat/completions")
+    @POST("chat/completions")
     suspend fun getCompletions(
         @Body request: LLMChatRequest
     ): LLMChatResponse
