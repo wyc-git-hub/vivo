@@ -11,6 +11,8 @@ data class KnowledgeSnippet(
     val summary: String,
     val tags: List<String>,
     val timestamp: Long = System.currentTimeMillis(),
-    val source: String
+    val source: String,
+    val formattedText: String = "",
+    val imagePath: String? = null
 )
 

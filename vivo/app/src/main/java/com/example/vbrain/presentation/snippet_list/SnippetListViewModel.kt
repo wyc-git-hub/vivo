@@ -1,5 +1,5 @@
 package com.example.vbrain.presentation.snippet_list
-
+import com.example.vbrain.data.remote.ResponseFormat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vbrain.data.local.entity.KnowledgeSnippet
@@ -271,24 +271,27 @@ class SnippetListViewModel @Inject constructor(
         var currentAttempt = 0
         while (currentAttempt < maxRetries) {
             try {
-                val systemPrompt = "你是一个专业的知识提纯助手。请对用户输入的文本进行去水提纯。务必返回严格的JSON格式，包含字段：\"summary\"(不超过50字的精炼摘要) 和 \"tags\"(1-3个核心关键词的字符串数组)。不要输出任何其他内容。"
+                val systemPrompt = "你是一个端侧多模态知识提取助手。请对输入文本进行处理：1. 提取不超过50字的精炼摘要 (summary) 和 1-3个核心关键词 (tags)。2. 剔除噪音并输出排版优美的 Markdown 文本到 formatted_text。务必返回纯JSON格式数据：{\"summary\": \"...\", \"tags\": [\"...\"], \"formatted_text\": \"...\"}"
 
                 val request = LLMChatRequest(
                     messages = listOf(
                         LLMMessage(role = "system", content = systemPrompt),
                         LLMMessage(role = "user", content = snippet.originalText)
-                    )
+                    ),
+//                    response_format = ResponseFormat(type = "json_object")
                 )
 
                 val response = llmApiService.getCompletions(request)
 
                 val content = response.choices.firstOrNull()?.message?.content
                 if (!content.isNullOrBlank()) {
-                    val result = gson.fromJson(content, LLMResult::class.java)
+                    val cleanJson = content.replace("```json", "").replace("```", "").trim()
+                    val result = gson.fromJson(cleanJson, LLMResult::class.java)
 
                     val updatedSnippet = snippet.copy(
                         summary = result.summary,
-                        tags = result.tags
+                        tags = result.tags,
+                        formattedText = result.formatted_text ?: ""
                     )
 
                     repository.updateSnippet(updatedSnippet)

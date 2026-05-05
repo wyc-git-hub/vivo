@@ -19,11 +19,14 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
     suspend operator fun invoke(originalText: String, source: String = "系统分享") {
         var summary = ""
         var tags = listOf("未分类")
+        var formattedText = ""
 
         try {
             val systemPrompt = """
-                你是一个端侧知识提取助手。请阅读用户提供的文本，提取不超过50字的精炼摘要 (summary) 和 1-3 个核心标签 (tags)。
-                你必须严格返回纯 JSON 格式数据，不要有任何额外的 Markdown 标记或解释。JSON 格式为：{"summary": "...", "tags": ["...", "..."]}
+                你是一个端侧多模态知识提取助手。请阅读用户提供的文本（可能是含有噪音的OCR识别文本或凌乱的内容），进行以下处理：
+                1. 提取不超过50字的精炼摘要 (summary) 和 1-3 个核心标签 (tags)。
+                2. 剔除无用的UI噪音和无关符号，输出结构化、排版优美的 Markdown 文本到 formatted_text 字段。
+                你必须严格返回纯 JSON 格式数据，不要有任何额外的 Markdown 标记或解释。JSON 格式为：{"summary": "...", "tags": ["...", "..."], "formatted_text": "..."}
             """.trimIndent()
 
             val request = LLMChatRequest(
@@ -43,6 +46,7 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
                 val result = gson.fromJson(cleanJson, LLMResult::class.java)
                 summary = result.summary
                 tags = result.tags
+                formattedText = result.formatted_text ?: ""
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -55,7 +59,8 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
             summary = summary,
             tags = tags,
             source = source,
-            timestamp = System.currentTimeMillis()
+            timestamp = System.currentTimeMillis(),
+            formattedText = formattedText
         )
         repository.addSnippet(snippet)
     }

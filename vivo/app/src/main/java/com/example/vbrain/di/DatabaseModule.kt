@@ -22,7 +22,9 @@ object DatabaseModule {
             context,
             VBrainDatabase::class.java,
             VBrainDatabase.DATABASE_NAME
-        ).build()
+        )
+        .addMigrations(VBrainDatabase.MIGRATION_1_2)
+        .build()
     }
 
     @Provides
@@ -31,4 +33,3 @@ object DatabaseModule {
         return database.knowledgeDao
     }
 }
-

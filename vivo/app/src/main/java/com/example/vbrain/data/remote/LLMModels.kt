@@ -14,9 +14,9 @@ data class LLMMessage(
     val content: String
 )
 
-data class ResponseFormat(
-    val type: String = "json_object"
-)
+//data class ResponseFormat(
+//    val type: String = "json_object"
+//)
 
 // 模型：响应体
 data class LLMChatResponse(
@@ -32,5 +32,10 @@ data class LLMChoice(
 // 模型：预期的 JSON 结果
 data class LLMResult(
     val summary: String,
-    val tags: List<String>
+    val tags: List<String>,
+    val formatted_text: String
+)
+
+data class ResponseFormat(
+    val type: String
 )
