@@ -15,6 +15,9 @@ interface KnowledgeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSnippet(snippet: KnowledgeSnippet): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSnippets(snippets: List<KnowledgeSnippet>)
+
     @Update
     suspend fun updateSnippet(snippet: KnowledgeSnippet)
 

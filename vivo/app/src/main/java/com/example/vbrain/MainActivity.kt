@@ -7,10 +7,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.NavType
 import androidx.navigation.navArgument
 import com.example.vbrain.presentation.snippet_list.HomeScreen
 import com.example.vbrain.presentation.snippet_detail.SnippetDetailScreen
@@ -21,7 +21,6 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
         setContent {
             VBrainTheme {
                 Surface(
@@ -29,14 +28,23 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
+
                     NavHost(navController = navController, startDestination = "home") {
+                        // 首页列表
                         composable("home") {
-                            HomeScreen(onNavigateToDetail = { id ->
-                                navController.navigate("detail/$id")
-                            })
+                            HomeScreen(
+                                onNavigateToDetail = { id ->
+                                    navController.navigate("detail/$id")
+                                },
+                                onNavigateToAdd = {
+                                    // 传 -1L 代表新建模式
+                                    navController.navigate("detail/-1")
+                                }
+                            )
                         }
+                        // 详情与编辑页
                         composable(
-                            "detail/{snippetId}",
+                            route = "detail/{snippetId}",
                             arguments = listOf(navArgument("snippetId") { type = NavType.LongType })
                         ) {
                             SnippetDetailScreen(

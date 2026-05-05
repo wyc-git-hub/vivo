@@ -12,6 +12,8 @@ class KnowledgeRepositoryImpl @Inject constructor(
 
     override suspend fun addSnippet(snippet: KnowledgeSnippet): Long = dao.insertSnippet(snippet)
 
+    override suspend fun addSnippets(snippets: List<KnowledgeSnippet>) = dao.insertSnippets(snippets)
+
     override suspend fun updateSnippet(snippet: KnowledgeSnippet) {
         dao.updateSnippet(snippet)
     }

@@ -10,8 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Share
@@ -23,6 +25,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.vbrain.presentation.theme.*
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,6 +37,7 @@ fun SnippetDetailScreen(
     val context = LocalContext.current
 
     var summaryText by remember { mutableStateOf("") }
+    var originalText by remember { mutableStateOf("") }
     var tagsList by remember { mutableStateOf<List<String>>(emptyList()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
@@ -42,8 +46,9 @@ fun SnippetDetailScreen(
     // Init form state
     LaunchedEffect(snippet) {
         snippet?.let {
-            if (summaryText.isEmpty() && tagsList.isEmpty()) {
+            if (summaryText.isEmpty() && originalText.isEmpty() && tagsList.isEmpty()) {
                 summaryText = it.summary
+                originalText = it.originalText
                 tagsList = it.tags
             }
         }
@@ -53,8 +58,8 @@ fun SnippetDetailScreen(
     // Here we can save explicitly on back button
     fun saveAndExit() {
         val currentSnippet = snippet
-        if (currentSnippet != null && (summaryText != currentSnippet.summary || tagsList != currentSnippet.tags)) {
-            viewModel.updateSnippet(summaryText, tagsList)
+        if (currentSnippet != null && (summaryText != currentSnippet.summary || originalText != currentSnippet.originalText || tagsList != currentSnippet.tags)) {
+            viewModel.saveSnippet(summaryText, tagsList, originalText)
         }
         onBack()
     }
@@ -62,7 +67,7 @@ fun SnippetDetailScreen(
     if (showDeleteDialog) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false },
-            title = { Text("确认���除") },
+            title = { Text("确认删除") },
             text = { Text("彻底删除这条知识？") },
             confirmButton = {
                 TextButton(onClick = {
@@ -78,31 +83,36 @@ fun SnippetDetailScreen(
     }
 
     Scaffold(
+        containerColor = GitHubWhite,
         topBar = {
-            TopAppBar(
-                title = { Text("详情编辑") },
-                navigationIcon = {
-                    IconButton(onClick = { saveAndExit() }) {
-                        Icon(Icons.Rounded.ArrowBack, contentDescription = "Back")
-                    }
-                },
-                actions = {
-                    IconButton(onClick = {
-                        val sendIntent: android.content.Intent = android.content.Intent().apply {
-                            action = android.content.Intent.ACTION_SEND
-                            putExtra(android.content.Intent.EXTRA_TEXT, summaryText + "\n\n" + (snippet?.originalText ?: ""))
-                            type = "text/plain"
+            Column {
+                TopAppBar(
+                    title = { Text("Edit Snippet", fontWeight = FontWeight.Bold, color = GitHubTextPrimary) },
+                    navigationIcon = {
+                        IconButton(onClick = { saveAndExit() }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back", tint = GitHubTextPrimary)
                         }
-                        val shareIntent = android.content.Intent.createChooser(sendIntent, null)
-                        context.startActivity(shareIntent)
-                    }) {
-                        Icon(Icons.Rounded.Share, contentDescription = "Share")
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = GitHubWhite),
+                    actions = {
+                        IconButton(onClick = {
+                            val sendIntent: android.content.Intent = android.content.Intent().apply {
+                                action = android.content.Intent.ACTION_SEND
+                                putExtra(android.content.Intent.EXTRA_TEXT, summaryText + "\n\n" + originalText)
+                                type = "text/plain"
+                            }
+                            val shareIntent = android.content.Intent.createChooser(sendIntent, null)
+                            context.startActivity(shareIntent)
+                        }) {
+                            Icon(Icons.Rounded.Share, contentDescription = "Share", tint = GitHubTextSecondary)
+                        }
+                        IconButton(onClick = { showDeleteDialog = true }) {
+                            Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
+                        }
                     }
-                    IconButton(onClick = { showDeleteDialog = true }) {
-                        Icon(Icons.Rounded.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error)
-                    }
-                }
-            )
+                )
+                HorizontalDivider(color = GitHubBorder, thickness = 1.dp)
+            }
         }
     ) { padding ->
         snippet?.let { current ->
@@ -115,18 +125,25 @@ fun SnippetDetailScreen(
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text("摘要", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GitHubTextPrimary)
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
                     value = summaryText,
                     onValueChange = { summaryText = it },
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(12.dp)
+                    shape = RoundedCornerShape(6.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = GitHubBg,
+                        focusedContainerColor = GitHubWhite,
+                        unfocusedBorderColor = GitHubBorder,
+                        focusedBorderColor = GitHubAccentBlue,
+                        cursorColor = GitHubAccentBlue
+                    )
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
                 
-                Text("标签", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Tags", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GitHubTextPrimary)
                 Spacer(modifier = Modifier.height(8.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -136,7 +153,20 @@ fun SnippetDetailScreen(
                             selected = true,
                             onClick = { tagsList = tagsList.filter { it != tag } },
                             label = { Text(tag) },
-                            trailingIcon = { Icon(Icons.Rounded.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp)) }
+                            trailingIcon = { Icon(Icons.Rounded.Close, contentDescription = "Remove", modifier = Modifier.size(16.dp)) },
+                            colors = InputChipDefaults.inputChipColors(
+                                containerColor = GitHubTagBg,
+                                selectedContainerColor = GitHubTagBg,
+                                labelColor = GitHubTagText,
+                                trailingIconColor = GitHubTagText
+                            ),
+                            border = InputChipDefaults.inputChipBorder(
+                                borderColor = Color.Transparent,
+                                selectedBorderColor = Color.Transparent,
+                                enabled = true,
+                                selected = true
+                            ),
+                            shape = RoundedCornerShape(100)
                         )
                     }
                 }
@@ -146,38 +176,62 @@ fun SnippetDetailScreen(
                         value = newTagText,
                         onValueChange = { newTagText = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("添加新标签") },
+                        placeholder = { Text("Add a tag...", color = GitHubTextSecondary) },
                         singleLine = true,
-                        shape = RoundedCornerShape(100)
+                        shape = RoundedCornerShape(6.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = GitHubBg,
+                            focusedContainerColor = GitHubWhite,
+                            unfocusedBorderColor = GitHubBorder,
+                            focusedBorderColor = GitHubAccentBlue,
+                            cursorColor = GitHubAccentBlue
+                        )
                     )
                     Spacer(modifier = Modifier.width(8.dp))
-                    Button(onClick = {
-                        if (newTagText.isNotBlank() && !tagsList.contains(newTagText.trim())) {
-                            tagsList = tagsList + newTagText.trim()
-                            newTagText = ""
-                        }
-                    }) {
-                        Text("添加")
+                    Button(
+                        onClick = {
+                            if (newTagText.isNotBlank() && !tagsList.contains(newTagText.trim())) {
+                                tagsList = tagsList + newTagText.trim()
+                                newTagText = ""
+                            }
+                        },
+                        shape = RoundedCornerShape(6.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = GitHubBg, contentColor = GitHubTextPrimary),
+                        border = BorderStroke(1.dp, GitHubBorder)
+                    ) {
+                        Text("Add", fontWeight = FontWeight.Bold)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("原文", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Original Text", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GitHubTextPrimary)
                 Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        text = current.originalText,
-                        modifier = Modifier.padding(16.dp),
-                        style = MaterialTheme.typography.bodyMedium
+                OutlinedTextField(
+                    value = originalText,
+                    onValueChange = { originalText = it },
+                    modifier = Modifier.fillMaxWidth().heightIn(min = 150.dp),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = GitHubBg,
+                        focusedContainerColor = GitHubWhite,
+                        unfocusedBorderColor = GitHubBorder,
+                        focusedBorderColor = GitHubAccentBlue,
+                        cursorColor = GitHubAccentBlue
                     )
+                )
+
+                Spacer(modifier = Modifier.height(32.dp))
+
+                Button(
+                    onClick = { saveAndExit() },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = GitHubGreen)
+                ) {
+                    Text("Save Snippet", fontWeight = FontWeight.Bold, color = GitHubWhite)
                 }
                 Spacer(modifier = Modifier.height(32.dp))
             }
         }
     }
 }
-

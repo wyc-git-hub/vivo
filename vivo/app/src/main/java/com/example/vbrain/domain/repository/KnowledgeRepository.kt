@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.Flow
 interface KnowledgeRepository {
     suspend fun addSnippet(snippet: KnowledgeSnippet): Long
     
+    suspend fun addSnippets(snippets: List<KnowledgeSnippet>)
+    
     suspend fun updateSnippet(snippet: KnowledgeSnippet)
     
     suspend fun deleteSnippet(snippet: KnowledgeSnippet)

@@ -9,8 +9,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -26,20 +24,43 @@ class SnippetDetailViewModel @Inject constructor(
     val snippet: StateFlow<KnowledgeSnippet?> = _snippet.asStateFlow()
 
     init {
+        if (snippetId != -1L) {
+            // 模式 1：查看或编辑现有的知识碎片
+            viewModelScope.launch {
+                repository.getSnippetById(snippetId).collect {
+                    _snippet.value = it
+                }
+            }
+        } else {
+            // 模式 2：初始化一个空的碎片，用于手动录入
+            _snippet.value = KnowledgeSnippet(
+                originalText = "",
+                summary = "",
+                tags = emptyList(),
+                source = "手动录入"
+            )
+        }
+    }
+
+    // 统一保存逻辑（无论是新增还是修改，都调用这个方法）
+    fun saveSnippet(summary: String, tags: List<String>, originalText: String) {
         viewModelScope.launch {
-            repository.getSnippetById(snippetId).filterNotNull().collect {
-                _snippet.value = it
+            val current = _snippet.value ?: return@launch
+            val updated = current.copy(
+                summary = summary,
+                tags = tags,
+                originalText = originalText
+            )
+
+            if (snippetId == -1L) {
+                repository.addSnippet(updated)
+            } else {
+                repository.updateSnippet(updated)
             }
         }
     }
 
-    fun updateSnippet(summary: String, tags: List<String>) {
-        val current = _snippet.value ?: return
-        viewModelScope.launch {
-            repository.updateSnippet(current.copy(summary = summary, tags = tags))
-        }
-    }
-
+    // 删除当前知识碎片
     fun deleteSnippet() {
         val current = _snippet.value ?: return
         viewModelScope.launch {
@@ -47,4 +68,3 @@ class SnippetDetailViewModel @Inject constructor(
         }
     }
 }
-

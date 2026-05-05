@@ -7,10 +7,11 @@ import com.example.vbrain.data.remote.LLMApiService
 import com.example.vbrain.data.remote.LLMChatRequest
 import com.example.vbrain.data.remote.LLMMessage
 import com.example.vbrain.data.remote.LLMResult
-import com.example.vbrain.data.remote.ResponseFormat
 import com.example.vbrain.domain.repository.KnowledgeRepository
+import com.example.vbrain.domain.use_case.ExtractAndSaveSnippetUseCase
 import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -21,12 +22,17 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import android.content.Context
+import android.net.Uri
+import android.widget.Toast
 import javax.inject.Inject
 
 @HiltViewModel
 class SnippetListViewModel @Inject constructor(
     private val repository: KnowledgeRepository,
-    private val llmApiService: LLMApiService
+    private val llmApiService: LLMApiService,
+    private val extractAndSaveSnippetUseCase: ExtractAndSaveSnippetUseCase
 ) : ViewModel() {
 
     private val gson = Gson()
@@ -40,6 +46,14 @@ class SnippetListViewModel @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading = _isLoading.asStateFlow()
 
+    // 🌟 新增：多选模式状态
+    private val _isSelectionMode = MutableStateFlow(false)
+    val isSelectionMode = _isSelectionMode.asStateFlow()
+
+    // 🌟 新增：记录选中的卡片 ID 集合
+    private val _selectedSnippetIds = MutableStateFlow<Set<Long>>(emptySet())
+    val selectedSnippetIds = _selectedSnippetIds.asStateFlow()
+
     private val _chatInput = MutableStateFlow("")
     val chatInput = _chatInput.asStateFlow()
 
@@ -49,7 +63,6 @@ class SnippetListViewModel @Inject constructor(
     private val _isChatSheetVisible = MutableStateFlow(false)
     val isChatSheetVisible = _isChatSheetVisible.asStateFlow()
 
-    // 提取所有不重复的标签
     val availableTags: StateFlow<List<String>> = repository.getAllSnippets()
         .map { snippets ->
             snippets.flatMap { it.tags }.distinct().sorted()
@@ -84,6 +97,45 @@ class SnippetListViewModel @Inject constructor(
         initialValue = emptyList()
     )
 
+    // --- 🌟 新增：多选与批量删除核心逻辑 ---
+    fun enterSelectionMode(initialId: Long) {
+        _isSelectionMode.value = true
+        _selectedSnippetIds.value = setOf(initialId)
+    }
+
+    fun exitSelectionMode() {
+        _isSelectionMode.value = false
+        _selectedSnippetIds.value = emptySet()
+    }
+
+    fun toggleSnippetSelection(id: Long) {
+        val current = _selectedSnippetIds.value.toMutableSet()
+        if (current.contains(id)) current.remove(id) else current.add(id)
+        _selectedSnippetIds.value = current
+        if (current.isEmpty()) exitSelectionMode()
+    }
+
+    fun selectAllSnippets() {
+        _selectedSnippetIds.value = snippets.value.map { it.id }.toSet()
+    }
+
+    fun deleteSelectedSnippets() {
+        viewModelScope.launch {
+            val idsToDelete = _selectedSnippetIds.value
+            val toDelete = snippets.value.filter { idsToDelete.contains(it.id) }
+            toDelete.forEach { repository.deleteSnippet(it) }
+            exitSelectionMode()
+        }
+    }
+
+    fun clearCurrentList() {
+        viewModelScope.launch {
+            snippets.value.forEach { repository.deleteSnippet(it) }
+            exitSelectionMode()
+        }
+    }
+    // -------------------------------------
+
     fun onSearchQueryChange(query: String) {
         _searchQuery.value = query
     }
@@ -109,14 +161,11 @@ class SnippetListViewModel @Inject constructor(
             _chatReply.value = "V-Brain 正在检索记忆并思考..."
             try {
                 val queryToken = question.split(" ").firstOrNull() ?: question
-
-                // 获取前5条相关的碎片
                 val topSnippets = repository.searchSnippets(queryToken).first().take(5)
 
                 val contextText = if (topSnippets.isEmpty()) {
                     "无相关内容"
                 } else {
-                    // 修复点：显式命名 snippet 参数，避免 ifEmpty 中的 it 引用错误
                     topSnippets.joinToString("\n- ") { snippet ->
                         snippet.summary.ifEmpty { snippet.originalText }.take(100)
                     }
@@ -134,8 +183,7 @@ class SnippetListViewModel @Inject constructor(
                     messages = listOf(
                         LLMMessage(role = "system", content = "你是 V-Brain，一个智能的端侧知识提取助手。"),
                         LLMMessage(role = "user", content = prompt)
-                    ),
-//                    response_format = ResponseFormat(type = "json_object")
+                    )
                 )
 
                 val response = llmApiService.getCompletions(request)
@@ -163,6 +211,7 @@ class SnippetListViewModel @Inject constructor(
 
     fun onTagSelect(tag: String?) {
         _selectedTag.value = if (_selectedTag.value == tag) null else tag
+        exitSelectionMode() // 🌟 切换标签时退出多选模式
     }
 
     fun insertMockSnippet(snippet: KnowledgeSnippet) {
@@ -191,6 +240,33 @@ class SnippetListViewModel @Inject constructor(
         }
     }
 
+    fun importFiles(uris: List<Uri>, context: Context) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _isLoading.value = true
+            var successCount = 0
+            try {
+                for (uri in uris) {
+                    try {
+                        context.contentResolver.openInputStream(uri)?.use { stream ->
+                            val text = stream.bufferedReader().readText()
+                            if (text.isNotBlank()) {
+                                extractAndSaveSnippetUseCase(originalText = text, source = "本地文件导入")
+                                successCount++
+                            }
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
+                    }
+                }
+            } finally {
+                _isLoading.value = false
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, "批量导入完成，成功处理 ${successCount} 个文件", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
     private suspend fun processSnippetWithRetry(snippet: KnowledgeSnippet, maxRetries: Int = 3) {
         var currentAttempt = 0
         while (currentAttempt < maxRetries) {
@@ -201,8 +277,7 @@ class SnippetListViewModel @Inject constructor(
                     messages = listOf(
                         LLMMessage(role = "system", content = systemPrompt),
                         LLMMessage(role = "user", content = snippet.originalText)
-                    ),
-//                    response_format = ResponseFormat(type = "json_object")
+                    )
                 )
 
                 val response = llmApiService.getCompletions(request)
