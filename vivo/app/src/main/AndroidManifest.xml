@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="com.example.vbrain">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
@@ -22,11 +21,27 @@
             </intent-filter>
         </activity>
 
-        <!-- 添加透明转发Activity以监听系统分享 -->
         <activity
-            android:name=".presentation.share.ShareReceiverActivity"
-            android:exported="true"
-            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+                android:name=".presentation.share.ShareReceiverActivity"
+                android:exported="true"
+                android:theme="@android:style/Theme.Translucent.NoTitleBar"
+                android:launchMode="singleTask">
+
+            <!-- 1. 接收单张图片分享 -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+
+            <!-- 2. 接收多图分享 (小红书经常是多图) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+
+            <!-- 3. 接收纯文本/链接分享 -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <category android:name="android.intent.category.DEFAULT" />

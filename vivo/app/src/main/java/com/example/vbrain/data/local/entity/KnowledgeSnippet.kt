@@ -13,6 +13,8 @@ data class KnowledgeSnippet(
     val timestamp: Long = System.currentTimeMillis(),
     val source: String,
     val formattedText: String = "",
-    val imagePath: String? = null
+    val imagePath: String? = null,
+    val imagePaths: List<String> = emptyList(),
+    val sourceUrl: String? = null
 )
 

@@ -23,7 +23,7 @@ object DatabaseModule {
             VBrainDatabase::class.java,
             VBrainDatabase.DATABASE_NAME
         )
-        .addMigrations(VBrainDatabase.MIGRATION_1_2)
+        .addMigrations(VBrainDatabase.MIGRATION_1_2, VBrainDatabase.MIGRATION_2_3)
         .build()
     }
 

@@ -19,6 +19,11 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import android.graphics.Bitmap
+import android.view.Display
+import java.io.File
+import java.io.FileOutputStream
+import java.util.UUID
 
 @AndroidEntryPoint
 class VBrainAccessibilityService : AccessibilityService() {
@@ -47,6 +52,9 @@ class VBrainAccessibilityService : AccessibilityService() {
     private fun extractScreenContent() {
         // 1. 点击瞬间立刻震动，证明程序收到了指令
         triggerVibration()
+
+        // 也可以试试抓取屏幕截图
+        captureScreenAndSave()
 
         val rootNode = rootInActiveWindow
         if (rootNode == null) {
@@ -130,5 +138,44 @@ class VBrainAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
+    }
+
+    // 在无障碍服务中调用这个方法
+    private fun captureScreenAndSave() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            takeScreenshot(
+                Display.DEFAULT_DISPLAY,
+                applicationContext.mainExecutor,
+                object : AccessibilityService.TakeScreenshotCallback {
+                    override fun onSuccess(screenshotResult: AccessibilityService.ScreenshotResult) {
+                        val hardwareBuffer = screenshotResult.hardwareBuffer
+                        // 将底层显存转为 Bitmap
+                        val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, screenshotResult.colorSpace)
+                        bitmap?.let {
+                            val localPath = saveBitmapToFile(it)
+                            // TODO: 截图拿到 localPath 后，配合你抓取到的文字，一起交给 LLM 处理
+                        }
+                        hardwareBuffer.close()
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        // 截图失败处理
+                    }
+                }
+            )
+        }
+    }
+
+    private fun saveBitmapToFile(bitmap: Bitmap): String? {
+        return try {
+            val imagesDir = File(filesDir, "accessibility_images").apply { mkdirs() }
+            val destFile = File(imagesDir, "${UUID.randomUUID()}.png")
+            FileOutputStream(destFile).use { out ->
+                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
+            }
+            destFile.absolutePath
+        } catch (e: Exception) {
+            null
+        }
     }
 }

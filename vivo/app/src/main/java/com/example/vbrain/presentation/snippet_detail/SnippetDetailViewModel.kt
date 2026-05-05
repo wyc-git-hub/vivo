@@ -4,17 +4,27 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.vbrain.data.local.entity.KnowledgeSnippet
+import com.example.vbrain.data.remote.LLMApiService
+import com.example.vbrain.data.remote.LLMChatRequest
+import com.example.vbrain.data.remote.LLMMessage
+import com.example.vbrain.data.remote.StreamingChunk
 import com.example.vbrain.domain.repository.KnowledgeRepository
+import com.google.gson.Gson
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+data class ChatMessage(val role: String, val content: String)
 
 @HiltViewModel
 class SnippetDetailViewModel @Inject constructor(
     private val repository: KnowledgeRepository,
+    private val llmApiService: LLMApiService,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -22,6 +32,14 @@ class SnippetDetailViewModel @Inject constructor(
 
     private val _snippet = MutableStateFlow<KnowledgeSnippet?>(null)
     val snippet: StateFlow<KnowledgeSnippet?> = _snippet.asStateFlow()
+
+    private val _chatMessages = MutableStateFlow<List<ChatMessage>>(emptyList())
+    val chatMessages: StateFlow<List<ChatMessage>> = _chatMessages.asStateFlow()
+
+    private val _isChatLoading = MutableStateFlow(false)
+    val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
+
+    private val gson = Gson()
 
     init {
         if (snippetId != -1L) {
@@ -49,7 +67,8 @@ class SnippetDetailViewModel @Inject constructor(
             val updated = current.copy(
                 summary = summary,
                 tags = tags,
-                originalText = originalText
+                originalText = originalText,
+                formattedText = originalText // 如果用户修改了，也同步更新 formattedText
             )
 
             if (snippetId == -1L) {
@@ -65,6 +84,96 @@ class SnippetDetailViewModel @Inject constructor(
         val current = _snippet.value ?: return
         viewModelScope.launch {
             repository.deleteSnippet(current)
+        }
+    }
+
+    fun sendMessage(userInput: String, currentSnippetContent: String) {
+        if (userInput.isBlank()) return
+
+        val trimmedContext = currentSnippetContent.take(3000) // Prevent token limit error
+        val isFirstMessage = _chatMessages.value.isEmpty()
+
+        val newUserMessage = ChatMessage(role = "user", content = userInput)
+        
+        // Append user message immediately
+        _chatMessages.value = _chatMessages.value + newUserMessage
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _isChatLoading.value = true
+
+            // Prepare LLM messages
+            val apiMessages = mutableListOf<LLMMessage>()
+            
+            if (isFirstMessage) {
+                apiMessages.add(
+                    LLMMessage(
+                        role = "system",
+                        content = "你是一个阅读助手。参考以下文章内容回答问题：[$trimmedContext]"
+                    )
+                )
+            } else {
+                // If it's not the first message, we can still provide context if needed, but here we assume the model remembers if we include history.
+                apiMessages.add(
+                    LLMMessage(
+                        role = "system",
+                        content = "你是一个阅读助手。参考以下文章内容回答问题：[$trimmedContext]"
+                    )
+                )
+            }
+
+            // Add history
+            _chatMessages.value.forEach { msg ->
+                apiMessages.add(LLMMessage(role = msg.role, content = msg.content))
+            }
+
+            try {
+                val request = LLMChatRequest(
+                    messages = apiMessages,
+                    stream = true
+                )
+
+                val responseBody = llmApiService.getStreamingCompletions(request)
+                
+                // Add empty assistant message that we will stream into
+                withContext(Dispatchers.Main) {
+                    _chatMessages.value = _chatMessages.value + ChatMessage(role = "assistant", content = "")
+                }
+
+                val reader = responseBody.charStream().buffered()
+                while (true) {
+                    val line = reader.readLine() ?: break
+                    if (line.startsWith("data: ") && line != "data: [DONE]") {
+                        val jsonString = line.substring(6).trim()
+                        if (jsonString.isNotEmpty()) {
+                            try {
+                                val chunk = gson.fromJson(jsonString, StreamingChunk::class.java)
+                                val deltaContent = chunk.choices.firstOrNull()?.delta?.content ?: ""
+                                
+                                if (deltaContent.isNotEmpty()) {
+                                    withContext(Dispatchers.Main) {
+                                        val currentList = _chatMessages.value.toMutableList()
+                                        val lastMessage = currentList.removeLast()
+                                        currentList.add(lastMessage.copy(content = lastMessage.content + deltaContent))
+                                        _chatMessages.value = currentList
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                e.printStackTrace()
+                            }
+                        }
+                    }
+                }
+
+            } catch (e: Exception) {
+                e.printStackTrace()
+                withContext(Dispatchers.Main) {
+                    _chatMessages.value = _chatMessages.value + ChatMessage(role = "assistant", content = "请求失败，请检查网络或配置")
+                }
+            } finally {
+                withContext(Dispatchers.Main) {
+                    _isChatLoading.value = false
+                }
+            }
         }
     }
 }

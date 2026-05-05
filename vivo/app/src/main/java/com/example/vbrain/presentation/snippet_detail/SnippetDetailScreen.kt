@@ -1,6 +1,7 @@
 package com.example.vbrain.presentation.snippet_detail
 
 import android.content.Intent
+import android.net.Uri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -20,7 +21,15 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import coil.compose.AsyncImage
 import com.example.vbrain.presentation.theme.*
+import dev.jeziellago.compose.markdowntext.MarkdownText
+import java.io.File
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.material.icons.automirrored.rounded.Send
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -29,12 +38,16 @@ fun SnippetDetailScreen(
     viewModel: SnippetDetailViewModel = hiltViewModel()
 ) {
     val snippet by viewModel.snippet.collectAsState()
+    val chatMessages by viewModel.chatMessages.collectAsState()
+    val isChatLoading by viewModel.isChatLoading.collectAsState()
     val context = LocalContext.current
 
     var summaryText by remember { mutableStateOf("") }
     var originalText by remember { mutableStateOf("") }
     var tagsList by remember { mutableStateOf<List<String>>(emptyList()) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showChatSheet by remember { mutableStateOf(false) }
+    var chatInput by remember { mutableStateOf("") }
 
     var newTagText by remember { mutableStateOf("") }
 
@@ -43,7 +56,8 @@ fun SnippetDetailScreen(
         snippet?.let {
             if (summaryText.isEmpty() && originalText.isEmpty() && tagsList.isEmpty()) {
                 summaryText = it.summary
-                originalText = it.originalText
+                // 显示经过 Markdown 排版的内容 (如果有)，否则显示原文
+                originalText = if (it.formattedText.isNotBlank()) it.formattedText else it.originalText
                 tagsList = it.tags
             }
         }
@@ -113,6 +127,17 @@ fun SnippetDetailScreen(
                 )
                 HorizontalDivider(color = GitHubBorder, thickness = 1.dp)
             }
+        },
+        floatingActionButton = {
+            if (snippet != null) {
+                FloatingActionButton(
+                    onClick = { showChatSheet = true },
+                    containerColor = GitHubAccentBlue,
+                    contentColor = GitHubWhite
+                ) {
+                    Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Chat Context")
+                }
+            }
         }
     ) { padding ->
         // 🌟 UX 优化：如果数据还在加载中，显示 Loading，避免白屏闪烁
@@ -131,6 +156,26 @@ fun SnippetDetailScreen(
                 .verticalScroll(rememberScrollState())
         ) {
             Spacer(modifier = Modifier.height(16.dp))
+
+            snippet?.imagePaths?.let { images ->
+                if (images.isNotEmpty()) {
+                    LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(images) { imagePath ->
+                            AsyncImage(
+                                model = File(imagePath),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .height(200.dp)
+                                    .width(200.dp)
+                            )
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(16.dp))
+                }
+            }
 
             Text("Summary", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GitHubTextPrimary)
             Spacer(modifier = Modifier.height(8.dp))
@@ -219,23 +264,38 @@ fun SnippetDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            Text("Original Text", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GitHubTextPrimary)
+            Text("Formatted Text", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = GitHubTextPrimary)
             Spacer(modifier = Modifier.height(8.dp))
-            OutlinedTextField(
-                value = originalText,
-                onValueChange = { originalText = it },
-                modifier = Modifier.fillMaxWidth().heightIn(min = 250.dp), // 🌟 稍微加高了原文区，阅读更舒服
+            Surface(
+                color = GitHubBg,
                 shape = RoundedCornerShape(6.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = GitHubBg,
-                    focusedContainerColor = GitHubWhite,
-                    unfocusedBorderColor = GitHubBorder,
-                    focusedBorderColor = GitHubAccentBlue,
-                    cursorColor = GitHubAccentBlue
-                )
-            )
+                border = BorderStroke(1.dp, GitHubBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(modifier = Modifier.padding(16.dp)) {
+                    MarkdownText(
+                        markdown = originalText,
+                        color = GitHubTextPrimary
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(32.dp))
+
+            snippet?.sourceUrl?.let { url ->
+                Button(
+                    onClick = {
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(6.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = GitHubAccentBlue)
+                ) {
+                    Text("查看原文", fontWeight = FontWeight.Bold, color = GitHubWhite)
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+            }
 
             // 底部的显式保存按钮 (照顾那些不知道“返回会自动保存”的用户)
             Button(
@@ -247,6 +307,123 @@ fun SnippetDetailScreen(
                 Text("Save Snippet", fontWeight = FontWeight.Bold, color = GitHubWhite)
             }
             Spacer(modifier = Modifier.height(32.dp))
+        }
+    }
+
+    if (showChatSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showChatSheet = false },
+            containerColor = GitHubBg,
+            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .fillMaxHeight(0.85f)
+            ) {
+                Text(
+                    text = "Contextual Chat",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = GitHubTextPrimary,
+                    modifier = Modifier.padding(16.dp)
+                )
+                HorizontalDivider(color = GitHubBorder)
+
+                val listState = rememberLazyListState()
+                LaunchedEffect(chatMessages.size) {
+                    if (chatMessages.isNotEmpty()) {
+                        listState.animateScrollToItem(chatMessages.size - 1)
+                    }
+                }
+
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                    items(chatMessages) { msg ->
+                        val isUser = msg.role == "user"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
+                        ) {
+                            Surface(
+                                color = if (isUser) GitHubAccentBlue else GitHubWhite,
+                                shape = RoundedCornerShape(
+                                    topStart = 12.dp,
+                                    topEnd = 12.dp,
+                                    bottomStart = if (isUser) 12.dp else 4.dp,
+                                    bottomEnd = if (isUser) 4.dp else 12.dp
+                                ),
+                                border = if (isUser) null else BorderStroke(1.dp, GitHubBorder),
+                                modifier = Modifier.widthIn(max = 280.dp)
+                            ) {
+                                Box(modifier = Modifier.padding(12.dp)) {
+                                    if (isUser) {
+                                        Text(msg.content, color = GitHubWhite)
+                                    } else {
+                                        MarkdownText(
+                                            markdown = msg.content,
+                                            color = GitHubTextPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item { Spacer(modifier = Modifier.height(8.dp)) }
+                }
+
+                HorizontalDivider(color = GitHubBorder)
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = chatInput,
+                        onValueChange = { chatInput = it },
+                        placeholder = { Text("Ask something...", color = GitHubTextSecondary) },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            unfocusedContainerColor = GitHubWhite,
+                            focusedContainerColor = GitHubWhite,
+                            unfocusedBorderColor = GitHubBorder,
+                            focusedBorderColor = GitHubAccentBlue
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    FloatingActionButton(
+                        onClick = {
+                            if (chatInput.isNotBlank() && !isChatLoading) {
+                                viewModel.sendMessage(chatInput.trim(), originalText)
+                                chatInput = ""
+                            }
+                        },
+                        containerColor = GitHubAccentBlue,
+                        contentColor = GitHubWhite,
+                        modifier = Modifier.size(48.dp)
+                    ) {
+                        if (isChatLoading) {
+                            CircularProgressIndicator(
+                                color = GitHubWhite,
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send")
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.navigationBarsPadding())
+            }
         }
     }
 }

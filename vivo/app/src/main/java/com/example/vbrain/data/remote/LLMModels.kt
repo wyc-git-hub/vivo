@@ -6,7 +6,8 @@ data class LLMChatRequest(
     val model: String = "qwen-turbo",
     val messages: List<LLMMessage>,
     val temperature: Double = 0.3,
-    val response_format: ResponseFormat? = null
+    val response_format: ResponseFormat? = null,
+    val stream: Boolean = false
 )
 
 data class LLMMessage(
@@ -29,11 +30,23 @@ data class LLMChoice(
     val finish_reason: String?
 )
 
+data class StreamingDelta(
+    val content: String?
+)
+
+data class StreamingChoice(
+    val delta: StreamingDelta
+)
+
+data class StreamingChunk(
+    val choices: List<StreamingChoice>
+)
+
 // 模型：预期的 JSON 结果
 data class LLMResult(
-    val summary: String,
-    val tags: List<String>,
-    val formatted_text: String
+    val title: String,
+    val content: String,
+    val tags: List<String>
 )
 
 data class ResponseFormat(

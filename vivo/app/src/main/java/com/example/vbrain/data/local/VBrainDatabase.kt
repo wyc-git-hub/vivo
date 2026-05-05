@@ -10,7 +10,7 @@ import com.example.vbrain.data.local.entity.KnowledgeSnippet
 
 @Database(
     entities = [KnowledgeSnippet::class],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -25,6 +25,13 @@ abstract class VBrainDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE knowledge_snippets ADD COLUMN formattedText TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE knowledge_snippets ADD COLUMN imagePath TEXT")
+            }
+        }
+
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE knowledge_snippets ADD COLUMN imagePaths TEXT NOT NULL DEFAULT '[]'")
+                db.execSQL("ALTER TABLE knowledge_snippets ADD COLUMN sourceUrl TEXT")
             }
         }
     }

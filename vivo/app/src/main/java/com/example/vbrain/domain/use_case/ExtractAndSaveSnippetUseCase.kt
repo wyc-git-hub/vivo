@@ -16,7 +16,12 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
 ) {
     private val gson = Gson()
 
-    suspend operator fun invoke(originalText: String, source: String = "系统分享") {
+    suspend operator fun invoke(
+        originalText: String, 
+        source: String = "系统分享",
+        imagePaths: List<String> = emptyList(),
+        sourceUrl: String? = null
+    ) {
         var summary = ""
         var tags = listOf("未分类")
         var formattedText = ""
@@ -24,9 +29,12 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
         try {
             val systemPrompt = """
                 你是一个端侧多模态知识提取助手。请阅读用户提供的文本（可能是含有噪音的OCR识别文本或凌乱的内容），进行以下处理：
-                1. 提取不超过50字的精炼摘要 (summary) 和 1-3 个核心标签 (tags)。
-                2. 剔除无用的UI噪音和无关符号，输出结构化、排版优美的 Markdown 文本到 formatted_text 字段。
-                你必须严格返回纯 JSON 格式数据，不要有任何额外的 Markdown 标记或解释。JSON 格式为：{"summary": "...", "tags": ["...", "..."], "formatted_text": "..."}
+                1. 提取不超过50字的精炼摘要 (title) 和 1-3 个核心标签 (tags)。
+                2. 剔除无用的UI噪音和无关符号，输出结构化、排版优美的 Markdown 文本到 content 字段。
+                你必须严格返回纯 JSON 格式数据，不要有任何额外的 Markdown 标记或解释。JSON 格式为：{"title": "...", "tags": ["...", "..."], "content": "..."}
+                请注意是精炼摘要 (title)不超过50字，正文内容要详细，且剔除无关内容，不要加入与输入文本无关的内容，正文对输入文本进行详细处理，如果有评论内容，请突出重点，列举关键评论。
+                结构要清晰，要类似笔记的形式，使用 Markdown 语法进行排版，标题使用一级标题，重要内容加粗，列表清晰分明。
+                先给出一个总结的笔记，随后给出一个非常详细的笔记，最后给出一个总结性的标签列表。请严格按照这个顺序输出，并且保证输出的 JSON 格式正确。
             """.trimIndent()
 
             val request = LLMChatRequest(
@@ -44,9 +52,9 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
                 // 如果模型带有 ```json 包装，先做简单清理
                 val cleanJson = content.replace("```json", "").replace("```", "").trim()
                 val result = gson.fromJson(cleanJson, LLMResult::class.java)
-                summary = result.summary
+                summary = result.title
                 tags = result.tags
-                formattedText = result.formatted_text ?: ""
+                formattedText = result.content ?: ""
             }
         } catch (e: Exception) {
             e.printStackTrace()
@@ -60,7 +68,9 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
             tags = tags,
             source = source,
             timestamp = System.currentTimeMillis(),
-            formattedText = formattedText
+            formattedText = formattedText,
+            imagePaths = imagePaths,
+            sourceUrl = sourceUrl
         )
         repository.addSnippet(snippet)
     }

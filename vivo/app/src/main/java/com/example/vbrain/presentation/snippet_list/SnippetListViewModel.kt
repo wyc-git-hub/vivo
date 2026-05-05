@@ -192,7 +192,7 @@ class SnippetListViewModel @Inject constructor(
                 if (!content.isNullOrBlank()) {
                     try {
                         val result = gson.fromJson(content, LLMResult::class.java)
-                        _chatReply.value = result.summary
+                        _chatReply.value = result.title
                     } catch(e: Exception) {
                         _chatReply.value = content.replace("```json", "").replace("```", "")
                     }
@@ -271,7 +271,9 @@ class SnippetListViewModel @Inject constructor(
         var currentAttempt = 0
         while (currentAttempt < maxRetries) {
             try {
-                val systemPrompt = "你是一个端侧多模态知识提取助手。请对输入文本进行处理：1. 提取不超过50字的精炼摘要 (summary) 和 1-3个核心关键词 (tags)。2. 剔除噪音并输出排版优美的 Markdown 文本到 formatted_text。务必返回纯JSON格式数据：{\"summary\": \"...\", \"tags\": [\"...\"], \"formatted_text\": \"...\"}"
+                val systemPrompt = "你是一个端侧多模态知识提取助手。请对输入文本进行处理：1. 提取不超过50字的精炼摘要 (title) 和 1-3个核心关键词 (tags)。" +
+                        "2. 剔除噪音并输出排版优美的 Markdown 文本到 content。务必返回纯JSON格式数据：{\"title\": \"...\", \"tags\": [\"...\"], \"content\": \"...\"}" +
+                        "请注意是精炼摘要 (title)不超过50字，正文内容要详细，且剔除无关内容，不要加入与输入文本无关的内容，正文对输入文本进行详细处理，如果有评论内容，请突出重点，列举关键评论"
 
                 val request = LLMChatRequest(
                     messages = listOf(
@@ -289,9 +291,9 @@ class SnippetListViewModel @Inject constructor(
                     val result = gson.fromJson(cleanJson, LLMResult::class.java)
 
                     val updatedSnippet = snippet.copy(
-                        summary = result.summary,
+                        summary = result.title,
                         tags = result.tags,
-                        formattedText = result.formatted_text ?: ""
+                        formattedText = result.content ?: ""
                     )
 
                     repository.updateSnippet(updatedSnippet)
