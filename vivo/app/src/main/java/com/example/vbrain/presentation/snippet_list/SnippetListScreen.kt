@@ -8,11 +8,15 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
+import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
+import androidx.compose.foundation.lazy.staggeredgrid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Description
@@ -40,16 +44,14 @@ import java.util.*
 fun HomeScreen(
     viewModel: SnippetListViewModel = hiltViewModel(),
     onNavigateToDetail: (Long) -> Unit,
-    onNavigateToAdd: () -> Unit // 🌟 新增：手动录入入口
+    onNavigateToAdd: () -> Unit, // 🌟 新增：手动录入入口
+    onNavigateToTodoCenter: () -> Unit // 🌟 新增：待办中心入口
 ) {
     val snippets by viewModel.snippets.collectAsState()
     val searchQuery by viewModel.searchQuery.collectAsState()
     val selectedTag by viewModel.selectedTag.collectAsState()
     val availableTags by viewModel.availableTags.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val isChatSheetVisible by viewModel.isChatSheetVisible.collectAsState()
-    val chatInput by viewModel.chatInput.collectAsState()
-    val chatReply by viewModel.chatReply.collectAsState()
 
     // 多选与确认弹窗状态
     val isSelectionMode by viewModel.isSelectionMode.collectAsState()
@@ -78,28 +80,28 @@ fun HomeScreen(
                     },
                     actions = {
                         IconButton(onClick = { viewModel.selectAllSnippets() }) {
-                            Icon(Icons.Rounded.SelectAll, contentDescription = "全选", tint = GitHubTextPrimary)
+                            Icon(Icons.Rounded.SelectAll, contentDescription = "全选", tint = MaterialTheme.colorScheme.primary)
                         }
                         IconButton(onClick = { viewModel.deleteSelectedSnippets() }) {
                             Icon(Icons.Rounded.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.error)
                         }
                     },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = GitHubWhite)
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
                 )
             } else {
                 // 普通模式下的顶部栏
                 TopAppBar(
-                    title = { Text("V-Brain 知识库", fontWeight = FontWeight.Bold, color = GitHubTextPrimary) },
-                    colors = TopAppBarDefaults.topAppBarColors(containerColor = GitHubWhite),
+                    title = { Text("我的知识大脑", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground) },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                     actions = {
                         if (isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(24.dp).padding(end = 16.dp), strokeWidth = 2.dp)
                         } else {
                             IconButton(onClick = { filePickerLauncher.launch("text/*") }) {
-                                Icon(Icons.Rounded.FileUpload, contentDescription = "Import", tint = GitHubTextSecondary)
+                                Icon(Icons.Rounded.FileUpload, contentDescription = "Import", tint = MaterialTheme.colorScheme.onSurface)
                             }
                             IconButton(onClick = { viewModel.processUnsummarizedSnippets() }) {
-                                Icon(Icons.Rounded.CloudSync, contentDescription = "Sync", tint = GitHubTextSecondary)
+                                Icon(Icons.Rounded.CloudSync, contentDescription = "Sync", tint = MaterialTheme.colorScheme.onSurface)
                             }
                         }
                         if (snippets.isNotEmpty()) {
@@ -110,52 +112,35 @@ fun HomeScreen(
                     }
                 )
             }
-            HorizontalDivider(color = GitHubBorder, thickness = 1.dp)
         },
-        containerColor = GitHubBg,
-        floatingActionButton = {
-            if (!isSelectionMode) { // 多选时隐藏悬浮窗，防误触
-                Column(horizontalAlignment = Alignment.End) {
-                    // 🌟 新增：手动录入按钮 (小号悬浮按钮，不抢戏)
-                    SmallFloatingActionButton(
-                        onClick = onNavigateToAdd,
-                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
-                    ) {
-                        Icon(Icons.Rounded.Add, contentDescription = "Manual Add")
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    // 原有的 AI 问答按钮
-                    FloatingActionButton(
-                        onClick = { viewModel.toggleChatSheet(true) },
-                        containerColor = MaterialTheme.colorScheme.primaryContainer
-                    ) {
-                        Icon(Icons.Rounded.AutoAwesome, contentDescription = "AI Q&A", tint = MaterialTheme.colorScheme.onPrimaryContainer)
-                    }
-                }
-            }
-        }
+        containerColor = MaterialTheme.colorScheme.background
+        // 移除 FAB，由 MainScreen 统一管理
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
             if (isLoading) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
 
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = viewModel::onSearchQueryChange,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                placeholder = { Text("搜索知识、摘要或标签...", color = GitHubTextSecondary) },
-                leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "Search", tint = GitHubTextSecondary) },
-                singleLine = true,
-                shape = RoundedCornerShape(6.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    unfocusedContainerColor = GitHubWhite,
-                    focusedContainerColor = GitHubWhite,
-                    unfocusedBorderColor = GitHubBorder,
-                    focusedBorderColor = GitHubAccentBlue,
-                    cursorColor = GitHubAccentBlue
+            Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = viewModel::onSearchQueryChange,
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("搜索我的知识...", color = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = "Search", tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    singleLine = true,
+                    shape = MaterialTheme.shapes.large,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                        unfocusedBorderColor = Color.Transparent,
+                        focusedBorderColor = MaterialTheme.colorScheme.primary,
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    )
                 )
-            )
+                Spacer(modifier = Modifier.width(8.dp))
+                IconButton(onClick = { /* TODO: Sort actions */ }, modifier = Modifier.background(MaterialTheme.colorScheme.surface, shape = RoundedCornerShape(100))) {
+                    Icon(Icons.Rounded.Sort, contentDescription = "Sort", tint = MaterialTheme.colorScheme.onSurface)
+                }
+            }
             LazyRow(
                 modifier = Modifier.fillMaxWidth(),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -168,14 +153,14 @@ fun HomeScreen(
                         label = { Text("全部") },
                         shape = RoundedCornerShape(100),
                         colors = FilterChipDefaults.filterChipColors(
-                            containerColor = GitHubWhite,
-                            selectedContainerColor = GitHubWhite,
-                            labelColor = GitHubTextSecondary,
-                            selectedLabelColor = GitHubAccentBlue
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                         ),
                         border = FilterChipDefaults.filterChipBorder(
-                            borderColor = GitHubBorder,
-                            selectedBorderColor = GitHubAccentBlue,
+                            borderColor = Color.Transparent,
+                            selectedBorderColor = Color.Transparent,
                             enabled = true,
                             selected = selectedTag == "全部" || selectedTag == null
                         )
@@ -188,14 +173,14 @@ fun HomeScreen(
                         label = { Text(tag) },
                         shape = RoundedCornerShape(100),
                         colors = FilterChipDefaults.filterChipColors(
-                            containerColor = GitHubWhite,
-                            selectedContainerColor = GitHubWhite,
-                            labelColor = GitHubTextSecondary,
-                            selectedLabelColor = GitHubAccentBlue
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                         ),
                         border = FilterChipDefaults.filterChipBorder(
-                            borderColor = GitHubBorder,
-                            selectedBorderColor = GitHubAccentBlue,
+                            borderColor = Color.Transparent,
+                            selectedBorderColor = Color.Transparent,
                             enabled = true,
                             selected = selectedTag == tag
                         )
@@ -210,15 +195,17 @@ fun HomeScreen(
                 ) {
                     Icon(Icons.Rounded.Inbox, contentDescription = "Empty", modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.surfaceVariant)
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(text = "暂无知识碎片", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(text = "暂无知识碎片", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(text = "点击右下角 + 号或使用系统分享获取第一条知识吧！", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    Text(text = "点击右下角 + 号或使用系统分享获取第一条知识吧！", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground.copy(alpha=0.6f), textAlign = TextAlign.Center)
                 }
             } else {
-                LazyColumn(
+                LazyVerticalStaggeredGrid(
+                    columns = StaggeredGridCells.Adaptive(160.dp),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    verticalItemSpacing = 16.dp,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     items(snippets, key = { it.id }) { snippet ->
                         val isSelected = selectedSnippetIds.contains(snippet.id)
@@ -238,10 +225,10 @@ fun HomeScreen(
                             enableDismissFromStartToEnd = false,
                             backgroundContent = {
                                 val color by animateColorAsState(
-                                    if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.errorContainer else Color.Transparent
+                                    if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) MaterialTheme.colorScheme.errorContainer else Color.Transparent, label = ""
                                 )
                                 Box(
-                                    modifier = Modifier.fillMaxSize().background(color, RoundedCornerShape(20.dp)).padding(horizontal = 24.dp),
+                                    modifier = Modifier.fillMaxSize().background(color, MaterialTheme.shapes.large).padding(horizontal = 24.dp),
                                     contentAlignment = Alignment.CenterEnd
                                 ) {
                                     Icon(Icons.Rounded.Delete, contentDescription = "删除", tint = MaterialTheme.colorScheme.onErrorContainer)
@@ -273,7 +260,7 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = { showClearConfirmDialog = false },
             title = { Text("快速清空") },
-            text = { Text("确定要删除当前列表下的���有知识碎片吗？此操作不可恢复。") },
+            text = { Text("确定要删除当前列表下的所有知识碎片吗？此操作不可恢复。") },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.clearCurrentList()
@@ -285,44 +272,9 @@ fun HomeScreen(
             }
         )
     }
-
-    // AI 问答抽屉
-    if (isChatSheetVisible) {
-        ModalBottomSheet(onDismissRequest = { viewModel.toggleChatSheet(false) }, containerColor = MaterialTheme.colorScheme.surface) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 32.dp)) {
-                Text("V-Brain 问答", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Spacer(modifier = Modifier.height(16.dp))
-                if (chatReply.isNotEmpty()) {
-                    Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-                        Text(text = chatReply, modifier = Modifier.padding(12.dp), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSecondaryContainer)
-                    }
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedTextField(
-                        value = chatInput, onValueChange = viewModel::onChatInputChange, modifier = Modifier.weight(1f),
-                        placeholder = { Text("向 V-Brain 提问...") }, shape = RoundedCornerShape(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    IconButton(
-                        onClick = {
-                            if (chatInput.isNotBlank()) {
-                                viewModel.askQuestion()
-                                viewModel.onChatInputChange("")
-                            }
-                        },
-                        colors = IconButtonDefaults.iconButtonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier.background(MaterialTheme.colorScheme.primary, shape = RoundedCornerShape(100))
-                    ) {
-                        Icon(Icons.Rounded.Send, contentDescription = "Send", tint = MaterialTheme.colorScheme.onPrimary)
-                    }
-                }
-            }
-        }
-    }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 fun KnowledgeCard(
     snippet: KnowledgeSnippet,
@@ -334,77 +286,66 @@ fun KnowledgeCard(
     val dateFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
     val context = LocalContext.current
 
-    OutlinedCard(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             ),
-        shape = RoundedCornerShape(6.dp),
-        colors = CardDefaults.outlinedCardColors(containerColor = GitHubWhite),
-        border = BorderStroke(1.dp, if (isSelected) GitHubAccentBlue else GitHubBorder),
-        elevation = CardDefaults.outlinedCardElevation(0.dp)
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surface,
+        border = if (isSelected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+        shadowElevation = 0.dp
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+        Column(
+            modifier = Modifier.padding(16.dp)
         ) {
             if (isSelectionMode) {
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onClick() },
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier.padding(bottom = 8.dp)
                 )
             }
 
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(16.dp), tint = GitHubTextSecondary)
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = snippet.source, style = MaterialTheme.typography.labelSmall, color = GitHubTextPrimary, fontWeight = FontWeight.Bold)
-                    }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(text = dateFormat.format(Date(snippet.timestamp)), style = MaterialTheme.typography.labelSmall, color = GitHubTextSecondary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        // 保留剪贴板复制功能
-                        IconButton(
-                            onClick = {
-                                val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                val clip = ClipData.newPlainText("vbrain", snippet.summary + "\n\n" + snippet.originalText)
-                                clipboard.setPrimaryClip(clip)
-                                Toast.makeText(context, "已复制到剪贴板", Toast.LENGTH_SHORT).show()
-                            },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(Icons.Rounded.ContentCopy, contentDescription = "Copy", modifier = Modifier.size(14.dp), tint = GitHubTextSecondary)
-                        }
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Outlined.Description, contentDescription = null, modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = snippet.source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Spacer(modifier = Modifier.height(8.dp))
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = dateFormat.format(Date(snippet.timestamp)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
 
-                // 🌟 ��显示摘要，完整原文统一放在详情页展示，保持列表清爽
-                Text(
-                    text = snippet.summary.ifEmpty { "未提纯的知识碎片 (待处理)" },
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = GitHubAccentBlue,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Text(
+                text = snippet.summary.ifEmpty { "未提纯的知识碎片 (待处理)" },
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface,
+                lineHeight = MaterialTheme.typography.titleMedium.lineHeight,
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis
+            )
 
-                Spacer(modifier = Modifier.height(12.dp))
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Start, verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        snippet.tags.take(3).forEach { tag ->
-                            Surface(shape = RoundedCornerShape(100), color = GitHubTagBg) {
-                                Text(text = tag, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = GitHubTagText, fontWeight = FontWeight.Bold)
-                            }
-                        }
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            // 🌟 解决横排挤压：使用 FlowRow 自动换行
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                snippet.tags.take(6).forEach { tag ->
+                    Surface(shape = RoundedCornerShape(8.dp), color = MaterialTheme.colorScheme.surfaceVariant) {
+                        Text(text = tag, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

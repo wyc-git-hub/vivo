@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.vbrain.data.local.VBrainDatabase
 import com.example.vbrain.data.local.dao.KnowledgeDao
+import com.example.vbrain.data.local.dao.TodoDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,7 +24,7 @@ object DatabaseModule {
             VBrainDatabase::class.java,
             VBrainDatabase.DATABASE_NAME
         )
-        .addMigrations(VBrainDatabase.MIGRATION_1_2, VBrainDatabase.MIGRATION_2_3)
+        .addMigrations(VBrainDatabase.MIGRATION_1_2, VBrainDatabase.MIGRATION_2_3, VBrainDatabase.MIGRATION_3_4)
         .build()
     }
 
@@ -31,5 +32,11 @@ object DatabaseModule {
     @Singleton
     fun provideKnowledgeDao(database: VBrainDatabase): KnowledgeDao {
         return database.knowledgeDao
+    }
+
+    @Provides
+    @Singleton
+    fun provideTodoDao(database: VBrainDatabase): TodoDao {
+        return database.todoDao
     }
 }

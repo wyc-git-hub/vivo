@@ -44,9 +44,11 @@ data class StreamingChunk(
 
 // 模型：预期的 JSON 结果
 data class LLMResult(
-    val title: String,
-    val content: String,
-    val tags: List<String>
+    val title: String? = null,
+    val summary: String? = null,
+    val content: String? = null,
+    val tags: List<String>? = null,
+    val entities: List<String>? = null
 )
 
 data class ResponseFormat(

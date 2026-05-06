@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- 修复点：移除 typeAllMask，仅监听必要的窗口内容和状态变化，防止被系统杀后台 -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeAllMask"
-    android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagRequestAccessibilityButton"
-    android:canRetrieveWindowContent="true"
-    android:description="@string/accessibility_description" />
-
+                       android:accessibilityEventTypes="typeWindowStateChanged|typeWindowContentChanged"
+                       android:accessibilityFeedbackType="feedbackGeneric"
+                       android:accessibilityFlags="flagDefault|flagRetrieveInteractiveWindows|flagIncludeNotImportantViews|flagRequestAccessibilityButton"
+                       android:canRetrieveWindowContent="true"
+                       android:description="@string/accessibility_description" />

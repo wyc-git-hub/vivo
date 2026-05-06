@@ -152,6 +152,67 @@ class SnippetListViewModel @Inject constructor(
         }
     }
 
+    // 🌟 新增：生成每日复习卡片 (Spaced Repetition)
+    fun generateDailyReviewCard() {
+        viewModelScope.launch {
+            _isChatSheetVisible.value = true
+            _chatReply.value = "正在洗牌你的知识库，抽取今日复习卡片..."
+            _isLoading.value = true
+            
+            try {
+                val allSnippets = snippets.value
+                if (allSnippets.isEmpty()) {
+                    _chatReply.value = "你的知识库当前为空，快去收集第一条碎片吧！"
+                    return@launch
+                }
+                
+                // 随机抽取一条历史知识（真实场景可根据算法计算艾宾浩斯记忆曲线）
+                val targetSnippet = allSnippets.random()
+                val textToReview = targetSnippet.formattedText.takeIf { it.isNotBlank() } ?: targetSnippet.originalText
+                
+                val prompt = """
+                    # Role: 认知心理学导师与记忆力教练
+                    你现在的任务是根据用户过去保存的一段知识片段，生成一张用于“间隔重复（Spaced Repetition）”的每日回顾复习卡片。
+
+                    # Workflow:
+                    1. 分析提供的【历史知识片段】，提取其最核心的 1 个关键概念。
+                    2. 生成一段极简的“知识唤醒”总结（不超过 3 句话）。
+                    3. 设计 1 个极具启发性的“测试问题（Quiz）”或“行动思考题”，引导用户回忆具体细节或思考如何将该知识应用到现实生活中。
+
+                    # Output Format (严格遵循此格式输出):
+                    > 💡 **核心重温**：[在此填入你的 3 句话极简总结]
+
+                    > ❓ **灵魂拷问**：[在此填入你的启发式问题]
+
+                    # Input Data:
+                    【历史知识片段】:
+                    $textToReview
+                """.trimIndent()
+
+                val request = LLMChatRequest(
+                    messages = listOf(
+                        LLMMessage(role = "system", content = "你是一个优秀的认知心理学导师。"),
+                        LLMMessage(role = "user", content = prompt)
+                    )
+                )
+
+                val response = llmApiService.getCompletions(request)
+                val content = response.choices.firstOrNull()?.message?.content
+
+                if (!content.isNullOrBlank()) {
+                    _chatReply.value = content.trim()
+                } else {
+                    _chatReply.value = "生成复习卡片失败，网络返回为空。"
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _chatReply.value = "生成出错：${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
     fun askQuestion() {
         val question = _chatInput.value.trim()
         if (question.isEmpty()) return
@@ -192,7 +253,7 @@ class SnippetListViewModel @Inject constructor(
                 if (!content.isNullOrBlank()) {
                     try {
                         val result = gson.fromJson(content, LLMResult::class.java)
-                        _chatReply.value = result.title
+                        _chatReply.value = result.summary ?: result.title ?: "无法提取摘要"
                     } catch(e: Exception) {
                         _chatReply.value = content.replace("```json", "").replace("```", "")
                     }
@@ -291,9 +352,9 @@ class SnippetListViewModel @Inject constructor(
                     val result = gson.fromJson(cleanJson, LLMResult::class.java)
 
                     val updatedSnippet = snippet.copy(
-                        summary = result.title,
-                        tags = result.tags,
-                        formattedText = result.content ?: ""
+                        summary = result.summary ?: result.title ?: snippet.summary,
+                        tags = result.tags ?: snippet.tags,
+                        formattedText = result.content ?: snippet.formattedText
                     )
 
                     repository.updateSnippet(updatedSnippet)

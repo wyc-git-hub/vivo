@@ -12,9 +12,11 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.vbrain.presentation.snippet_list.HomeScreen
+import com.example.vbrain.presentation.main.MainScreen
 import com.example.vbrain.presentation.snippet_detail.SnippetDetailScreen
+import com.example.vbrain.presentation.snippet_list.HomeScreen
 import com.example.vbrain.presentation.theme.VBrainTheme
+import com.example.vbrain.presentation.todo_center.TodoCenterScreen
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -23,26 +25,24 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             VBrainTheme {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = MaterialTheme.colorScheme.background
-                ) {
-                    val navController = rememberNavController()
+                val navController = rememberNavController()
 
-                    NavHost(navController = navController, startDestination = "home") {
-                        // 首页列表
-                        composable("home") {
-                            HomeScreen(
-                                onNavigateToDetail = { id ->
-                                    navController.navigate("detail/$id")
+                Surface(color = MaterialTheme.colorScheme.background) {
+                    NavHost(navController = navController, startDestination = "main") {
+                        composable("main") {
+                            MainScreen(
+                                onNavigateToDetail = { snippetId ->
+                                    navController.navigate("detail/$snippetId")
                                 },
-                                onNavigateToAdd = {
-                                    // 传 -1L 代表新建模式
+                                onNavigateToAddSnippet = {
                                     navController.navigate("detail/-1")
+                                },
+                                onNavigateToAddTodo = {
+                                    // TODO: Implement add todo navigation
                                 }
                             )
                         }
-                        // 详情与编辑页
+
                         composable(
                             route = "detail/{snippetId}",
                             arguments = listOf(navArgument("snippetId") { type = NavType.LongType })

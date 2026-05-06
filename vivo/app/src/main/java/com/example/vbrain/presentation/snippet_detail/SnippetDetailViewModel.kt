@@ -15,8 +15,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.example.vbrain.data.local.entity.TodoItem
 import javax.inject.Inject
 
 data class ChatMessage(val role: String, val content: String)
@@ -38,6 +43,21 @@ class SnippetDetailViewModel @Inject constructor(
 
     private val _isChatLoading = MutableStateFlow(false)
     val isChatLoading: StateFlow<Boolean> = _isChatLoading.asStateFlow()
+
+    // --- Todo Methods ---
+    val todos: StateFlow<List<TodoItem>> = snippet.flatMapLatest { snip ->
+        if (snip != null && snip.id != 0L) {
+            repository.getTodosBySnippetId(snip.id)
+        } else {
+            flowOf(emptyList())
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun toggleTodoCompletion(todoId: Long, isCompleted: Boolean) {
+        viewModelScope.launch {
+            repository.toggleTodoCompletion(todoId, isCompleted)
+        }
+    }
 
     private val gson = Gson()
 
