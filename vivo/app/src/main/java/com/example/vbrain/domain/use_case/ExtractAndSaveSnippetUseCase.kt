@@ -8,6 +8,7 @@ import com.example.vbrain.data.remote.LLMResult
 import com.example.vbrain.data.remote.ResponseFormat
 import com.example.vbrain.domain.repository.KnowledgeRepository
 import com.google.gson.Gson
+import android.util.Log
 import javax.inject.Inject
 
 class ExtractAndSaveSnippetUseCase @Inject constructor(
@@ -15,6 +16,20 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
     private val llmApiService: LLMApiService
 ) {
     private val gson = Gson()
+
+    private fun cleanMarkdownJson(rawContent: String): String {
+        return try {
+            var cleaned = rawContent.trim()
+            // 匹配开头的 ``` 或 ```json
+            cleaned = cleaned.replace(Regex("^```(?:json)?\\s*", RegexOption.IGNORE_CASE), "")
+            // 匹配结尾的 ```
+            cleaned = cleaned.replace(Regex("\\s*```$"), "")
+            cleaned.trim()
+        } catch (e: Exception) {
+            Log.e("ExtractAndSaveSnippet", "Error cleaning JSON", e)
+            rawContent
+        }
+    }
 
     suspend operator fun invoke(
         originalText: String, 
@@ -49,15 +64,18 @@ class ExtractAndSaveSnippetUseCase @Inject constructor(
             val content = response.choices.firstOrNull()?.message?.content
             
             if (!content.isNullOrBlank()) {
-                // 如果模型带有 ```json 包装，先做简单清理
-                val cleanJson = content.replace("```json", "").replace("```", "").trim()
-                val result = gson.fromJson(cleanJson, LLMResult::class.java)
-                summary = result.title
-                tags = result.tags
-                formattedText = result.content ?: ""
+                try {
+                    val cleanJson = cleanMarkdownJson(content)
+                    val result = gson.fromJson(cleanJson, LLMResult::class.java)
+                    summary = result.title ?: ""
+                    tags = result.tags ?: listOf("未分类")
+                    formattedText = result.content ?: ""
+                } catch (e: Exception) {
+                    Log.e("ExtractAndSaveSnippet", "JSON parsing failed: ${e.message}\nRaw Content: $content", e)
+                }
             }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e("ExtractAndSaveSnippet", "API request failed", e)
             // 解析或网络请求失败，使用默认值 ("未分类")
         }
 

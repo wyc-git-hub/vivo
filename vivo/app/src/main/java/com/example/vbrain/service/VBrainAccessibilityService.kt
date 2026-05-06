@@ -19,11 +19,6 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import android.graphics.Bitmap
-import android.view.Display
-import java.io.File
-import java.io.FileOutputStream
-import java.util.UUID
 
 @AndroidEntryPoint
 class VBrainAccessibilityService : AccessibilityService() {
@@ -50,70 +45,103 @@ class VBrainAccessibilityService : AccessibilityService() {
     }
 
     private fun extractScreenContent() {
-        // 1. 点击瞬间立刻震动，证明程序收到了指令
         triggerVibration()
 
-        // 也可以试试抓取屏幕截图
-        captureScreenAndSave()
+        serviceScope.launch {
+            withContext(Dispatchers.Main) {
+                Toast.makeText(applicationContext, "正在全屏扫描文字...", Toast.LENGTH_SHORT).show()
+            }
 
-        val rootNode = rootInActiveWindow
-        if (rootNode == null) {
-            Toast.makeText(applicationContext, "获取失败：小红书页面未加载完或限制了读取", Toast.LENGTH_SHORT).show()
-            return
-        }
+            val extractedText = extractAllScreenText()
+            Log.d("VBrainService", "抓取出文本长度: ${extractedText.length}")
 
-        val stringBuilder = StringBuilder()
-        traverseNode(rootNode, stringBuilder)
-        rootNode.recycle()
+            if (extractedText.isNotBlank()) {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(applicationContext, "抓取到 ${extractedText.length} 字，交由大脑思考...", Toast.LENGTH_SHORT).show()
+                }
 
-        val extractedText = stringBuilder.toString().trim()
-
-        if (extractedText.isNotEmpty()) {
-            Toast.makeText(applicationContext, "正在思考并存入大脑...", Toast.LENGTH_SHORT).show()
-
-            serviceScope.launch {
                 try {
-                    extractAndSaveSnippetUseCase(originalText = extractedText, source = "屏幕提取")
+                    // 防止文本过长引发 OOM 或大模型 Token 超限，进行适当截断
+                    val safeText = extractedText.take(15000)
+                    
+                    extractAndSaveSnippetUseCase(
+                        originalText = safeText, 
+                        source = "无障碍屏幕提取",
+                        imagePaths = emptyList()
+                    )
 
                     withContext(Dispatchers.Main) {
-                        triggerVibration() // 成功后再震动一下
-                        Toast.makeText(applicationContext, "🎉 保存成功", Toast.LENGTH_SHORT).show()
+                        triggerVibration()
+                        Toast.makeText(applicationContext, "🎉 保存与排版成功", Toast.LENGTH_SHORT).show()
                     }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(applicationContext, "保存时发生网络异常", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(applicationContext, "大脑思考中断: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
+            } else {
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(applicationContext, "未能提取到屏幕文字 (页面可能受限)", Toast.LENGTH_LONG).show()
+                }
             }
-        } else {
-            // 提示用户文字为什么没抓到
-            Toast.makeText(applicationContext, "未发现可提取文本（注意：AI无法直接读取图片里的文字）", Toast.LENGTH_LONG).show()
         }
     }
 
-    // 💥 增强版抓取逻辑：不再判断是否 isVisibleToUser，只要有文字统统抓走
-    private fun traverseNode(node: AccessibilityNodeInfo?, sb: StringBuilder) {
+    private fun extractAllScreenText(): String {
+        val sb = StringBuilder()
+        
+        try {
+            // 1. 优先尝试遍历所有活动视窗 (覆盖悬浮层/底部抽屉等)
+            val windowsList = windows
+            if (!windowsList.isNullOrEmpty()) {
+                for (window in windowsList) {
+                    val root = try { window.root } catch (e: Exception) { null }
+                    if (root != null) {
+                        extractTextRecursively(root, sb)
+                        try { root.recycle() } catch (e: Exception) {}
+                    }
+                }
+            } else {
+                // 2. 兜底方案：只抓取当前激活视窗
+                val root = try { rootInActiveWindow } catch (e: Exception) { null }
+                if (root != null) {
+                    extractTextRecursively(root, sb)
+                    try { root.recycle() } catch (e: Exception) {}
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VBrainService", "提取节点树时发生异常", e)
+        }
+        
+        return sb.toString().trim()
+    }
+
+    private fun extractTextRecursively(node: AccessibilityNodeInfo?, sb: StringBuilder) {
         if (node == null) return
 
-        // 【关键修改】：去掉了 if (node.isVisibleToUser) 的限制
         val text = node.text?.toString()
         val desc = node.contentDescription?.toString()
 
         if (!text.isNullOrBlank()) {
-            sb.append(text).append("\n")
+            sb.append(text.trim()).append("\n")
         } else if (!desc.isNullOrBlank()) {
-            sb.append(desc).append("\n")
+            sb.append(desc.trim()).append("\n")
         }
 
         for (i in 0 until node.childCount) {
-            val child = node.getChild(i)
-            traverseNode(child, sb)
-            child?.recycle()
+            try {
+                val child = node.getChild(i)
+                if (child != null) {
+                    extractTextRecursively(child, sb)
+                    try { child.recycle() } catch (e: Exception) {}
+                }
+            } catch (e: Exception) {
+                // 忽略单个节点发生的读取崩溃
+            }
         }
     }
 
-    // 震动反馈
     private fun triggerVibration() {
         try {
             val duration = 100L
@@ -138,44 +166,5 @@ class VBrainAccessibilityService : AccessibilityService() {
     override fun onDestroy() {
         super.onDestroy()
         serviceScope.cancel()
-    }
-
-    // 在无障碍服务中调用这个方法
-    private fun captureScreenAndSave() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            takeScreenshot(
-                Display.DEFAULT_DISPLAY,
-                applicationContext.mainExecutor,
-                object : AccessibilityService.TakeScreenshotCallback {
-                    override fun onSuccess(screenshotResult: AccessibilityService.ScreenshotResult) {
-                        val hardwareBuffer = screenshotResult.hardwareBuffer
-                        // 将底层显存转为 Bitmap
-                        val bitmap = Bitmap.wrapHardwareBuffer(hardwareBuffer, screenshotResult.colorSpace)
-                        bitmap?.let {
-                            val localPath = saveBitmapToFile(it)
-                            // TODO: 截图拿到 localPath 后，配合你抓取到的文字，一起交给 LLM 处理
-                        }
-                        hardwareBuffer.close()
-                    }
-
-                    override fun onFailure(errorCode: Int) {
-                        // 截图失败处理
-                    }
-                }
-            )
-        }
-    }
-
-    private fun saveBitmapToFile(bitmap: Bitmap): String? {
-        return try {
-            val imagesDir = File(filesDir, "accessibility_images").apply { mkdirs() }
-            val destFile = File(imagesDir, "${UUID.randomUUID()}.png")
-            FileOutputStream(destFile).use { out ->
-                bitmap.compress(Bitmap.CompressFormat.PNG, 100, out)
-            }
-            destFile.absolutePath
-        } catch (e: Exception) {
-            null
-        }
     }
 }
